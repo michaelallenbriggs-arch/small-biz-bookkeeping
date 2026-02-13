@@ -1,0 +1,153 @@
+import streamlit as st
+import pandas as pd
+import requests
+from datetime import timedelta
+
+st.set_page_config(page_title="QuickBooks CSV Compare", layout="wide")
+
+# ------------------------
+# Settings
+# ------------------------
+
+API_BASE = st.sidebar.text_input(
+    "API Base URL",
+    "http://127.0.0.1:8000"
+).rstrip("/")
+
+st.title("QuickBooks CSV Compare")
+st.caption("Compare bank transactions from QuickBooks against uploaded receipts.")
+
+# ------------------------
+# Helpers
+# ------------------------
+
+def load_all_receipts():
+    """
+    Pull normalized receipts from backend.
+    Expected to already exist in your pipeline.
+    """
+    url = f"{API_BASE}/receipts"
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.json().get("receipts", [])
+
+
+def normalize_csv(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Attempt to standardize QuickBooks CSV columns.
+    Supports multiple export formats.
+    """
+
+    df.columns = [c.lower().strip() for c in df.columns]
+
+    column_map = {
+        "date": ["date", "transaction date", "posted date"],
+        "amount": ["amount", "amt", "debit", "credit"],
+        "description": ["description", "memo", "payee", "name"]
+    }
+
+    normalized = {}
+
+    for std, variants in column_map.items():
+        for v in variants:
+            if v in df.columns:
+                normalized[std] = df[v]
+                break
+
+    out = pd.DataFrame(normalized)
+
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["amount"] = pd.to_numeric(out["amount"], errors="coerce").abs()
+    out["description"] = out["description"].astype(str)
+
+    return out.dropna(subset=["date", "amount"])
+
+
+def match_receipts(tx_df, receipts_df, tolerance=0.5):
+    """
+    Match receipts to transactions by:
+    - amount ± tolerance
+    - date ± 3 days
+    """
+
+    matches = []
+
+    for _, tx in tx_df.iterrows():
+        possible = receipts_df[
+            (receipts_df["total"].between(tx["amount"] - tolerance, tx["amount"] + tolerance)) &
+            (receipts_df["date"].between(tx["date"] - timedelta(days=3),
+                                          tx["date"] + timedelta(days=3)))
+        ]
+
+        matches.append(len(possible) > 0)
+
+    tx_df["receipt_found"] = matches
+    return tx_df
+
+
+# ------------------------
+# UI
+# ------------------------
+
+st.subheader("1. Upload QuickBooks CSV")
+
+csv_file = st.file_uploader(
+    "Upload QuickBooks transaction CSV",
+    type=["csv"]
+)
+
+if not csv_file:
+    st.info("Upload a QuickBooks CSV export to begin.")
+    st.stop()
+
+# ------------------------
+# Load CSV
+# ------------------------
+
+raw_csv = pd.read_csv(csv_file)
+csv_df = normalize_csv(raw_csv)
+
+st.subheader("2. Transactions Loaded")
+st.dataframe(csv_df, use_container_width=True)
+
+# ------------------------
+# Load Receipts
+# ------------------------
+
+st.subheader("3. Comparing Against Receipts")
+
+with st.spinner("Loading receipts from backend..."):
+    receipts_raw = load_all_receipts()
+
+if not receipts_raw:
+    st.warning("No receipts found in system.")
+    st.stop()
+
+receipts_df = pd.DataFrame(receipts_raw)
+
+receipts_df["date"] = pd.to_datetime(receipts_df["date"], errors="coerce")
+receipts_df["total"] = pd.to_numeric(receipts_df["total"], errors="coerce")
+
+# ------------------------
+# Compare
+# ------------------------
+
+compared = match_receipts(csv_df, receipts_df)
+
+st.subheader("4. Missing Receipt Report")
+
+missing = compared[compared["receipt_found"] == False]
+
+st.metric("Transactions", len(compared))
+st.metric("Missing Receipts", len(missing))
+
+st.dataframe(missing, use_container_width=True)
+
+st.download_button(
+    "Download Missing Receipts CSV",
+    missing.to_csv(index=False).encode("utf-8"),
+    file_name="missing_receipts.csv",
+    mime="text/csv"
+)
+
+st.success("Comparison complete.")
