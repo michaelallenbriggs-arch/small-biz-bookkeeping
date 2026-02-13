@@ -28,7 +28,9 @@ load_dotenv(find_dotenv(usecwd=True))
 # =============================================================================
 # Configuration
 # =============================================================================
-API_BASE = (os.getenv("API_BASE_URL") or os.getenv("BACKEND_URL") or "http://localhost:8000").rstrip("/")
+API_BASE = (os.getenv("API_BASE_URL") or os.getenv("BACKEND_URL") or os.getenv("API_BASE_URL") or "").rstrip("/")
+if not API_BASE:
+    raise RuntimeError("Missing BACKEND_BASE_URL (set it in Render Enviroment)")
 DEFAULT_LIMIT = int(os.getenv("UI_DEFAULT_LIMIT", "500"))
 
 st.set_page_config(

@@ -1,7 +1,11 @@
 import streamlit as st
 import requests
+import os
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.environ.get("BACKEND_BASE_URL") or os.environ.get("BACKEND_URL")
+if not API_BASE:
+    raise RuntimeError("Missing BACKEND_BASE_URL (set it in Rendor Enviroment)")
+API_BASE = API_BASE.rstrip("/")
 
 st.set_page_config(page_title="Review Queue", layout="wide")
 
