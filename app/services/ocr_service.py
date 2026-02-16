@@ -307,9 +307,9 @@ def _ocr_best_by_quality(
 
 
 def _tesseract_string(img: np.ndarray, lang: str, psm: int, whitelist: Optional[str]) -> str:
-    config = f"--oem 3 --psm {psm} -c preserve_interword_spaces=1 -c tessedit_do_invert=0 "
+    config = f"--oem 1 --psm {psm} -c preserve_interword_spaces=1 -c tessedit_do_invert=0"
     if whitelist:
-        config += f"-c tessedit_char_whitelist={whitelist} "
+        config += f" -c tessedit_char_whitelist={whitelist}"
     try:
         return pytesseract.image_to_string(img, lang=lang, config=config) or ""
     except Exception:
