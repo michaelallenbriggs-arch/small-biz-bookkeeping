@@ -16,6 +16,9 @@ RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.lis
 
 WORKDIR /app
 
+# FIX: Set the CORRECT tessdata path (change 4.00 to 5)
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
