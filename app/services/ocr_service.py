@@ -119,7 +119,7 @@ def _safe_ocr_image_pipeline(bgr: np.ndarray, lang: str, tag: str) -> Tuple[str,
 
 
 # -----------------------------------------------------------------------------
-# Fast “CPA-grade” OCR pipeline (speed-first)
+# Fast "CPA-grade" OCR pipeline (speed-first)
 # -----------------------------------------------------------------------------
 
 def _ocr_image_pipeline(bgr: np.ndarray, lang: str, tag: str) -> Tuple[str, float, str]:
@@ -131,6 +131,12 @@ def _ocr_image_pipeline(bgr: np.ndarray, lang: str, tag: str) -> Tuple[str, floa
       - Don't call image_to_data for confidence on every candidate
       - Prefer mixed-right-strip first (keeps TOTAL/TAX labels)
       - Only run expensive conditional passes when needed
+
+    FIXES APPLIED:
+      - Added PSM 4 for better receipt layout handling
+      - Added adaptive threshold variant for faded receipts
+      - Enhanced sharpening with morphological operations
+      - Improved whitelist for date separators
     """
     src_parts: List[str] = []
 
@@ -152,14 +158,26 @@ def _ocr_image_pipeline(bgr: np.ndarray, lang: str, tag: str) -> Tuple[str, floa
 
     # Variant A: denoise (good general)
     v_a = full_denoise
-    # Variant B: sharpen (good for thermal receipts)
-    blur = cv2.GaussianBlur(full_denoise, (0, 0), sigmaX=1.0)
-    v_b = cv2.addWeighted(full_denoise, 1.6, blur, -0.6, 0)
 
-    # --- A) Base OCR: 2 variants x 2 PSMs (FAST) ---
+    # Variant B: sharpen with morphological closing (FIX 4: better for thermal receipts)
+    blur = cv2.GaussianBlur(full_denoise, (0, 0), sigmaX=1.0)
+    v_b_sharp = cv2.addWeighted(full_denoise, 1.6, blur, -0.6, 0)
+    # Add slight morphological closing to reconnect broken characters
+    kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 1))
+    v_b = cv2.morphologyEx(v_b_sharp, cv2.MORPH_CLOSE, kernel_small, iterations=1)
+
+    # Variant C: adaptive threshold (FIX 2: best for faded receipts & inconsistent lighting)
+    v_c = cv2.adaptiveThreshold(
+        full_denoise, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, 11, 2
+    )
+
+    # --- A) Base OCR: 3 variants x 3 PSMs (FAST) ---
+    # FIX 1: Added PSM 4 for better receipt layout handling
     base_text, base_score, base_src = _ocr_best_by_quality(
-        variants=[("denoise", v_a), ("sharp", v_b)],
-        psms=[6, 11],
+        variants=[("denoise", v_a), ("sharp", v_b), ("adapt", v_c)],
+        psms=[4, 6, 11],
         lang=lang,
         tag=f"{tag}_base",
         whitelist=None,
@@ -205,11 +223,11 @@ def _ocr_image_pipeline(bgr: np.ndarray, lang: str, tag: str) -> Tuple[str, floa
     # --- B) Digits full-page: ONLY if base looks like it mentions totals but has no money ---
     if _looks_like_totals_missing(base_text):
         d_text, d_score, d_src = _ocr_best_by_quality(
-            variants=[("denoise", v_a), ("sharp", v_b)],
-            psms=[6, 11],
+            variants=[("denoise", v_a), ("sharp", v_b), ("adapt", v_c)],
+            psms=[4, 6, 11],
             lang=lang,
             tag=f"{tag}_digits",
-            whitelist="0123456789.$:/- ",
+            whitelist="0123456789.$:/-,() ",  # FIX 3: Added comma, parens for dates
         )
         d_clean = _cleanup_text(d_text)
         if d_clean.strip():
@@ -425,12 +443,13 @@ def _ocr_right_strip_digits_fast(bgr: np.ndarray, lang: str, tag: str) -> Tuple[
     blur = cv2.GaussianBlur(g, (0, 0), sigmaX=1.0)
     sharp = cv2.addWeighted(g, 1.6, blur, -0.6, 0)
 
+    # FIX 3: Improved whitelist for date separators
     text, score, src = _ocr_best_by_quality(
         variants=[("right_digits", sharp)],
         psms=[6, 7],
         lang=lang,
         tag=f"{tag}_right_digits",
-        whitelist="0123456789.$:/- ",
+        whitelist="0123456789.$:/-,() ",
     )
     return text, score, src
 
