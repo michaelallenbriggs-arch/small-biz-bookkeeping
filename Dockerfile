@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 # Install tesseract and clean up to keep image small
 RUN apt-get update && \
-    apt-get install -y 
+    apt-get install -y \
         tesseract-ocr \
         tesseract-ocr-eng \
         libtesseract-dev \
