@@ -1,11 +1,18 @@
 FROM python:3.11-slim
 
-# Install tesseract and clean up to keep image small
+# Install ALL system dependencies in one go
 RUN apt-get update && \
     apt-get install -y \
         tesseract-ocr \
         tesseract-ocr-eng \
         libtesseract-dev \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        libgomp1 \
+        libgthread-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,11 +21,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your application code
+# Copy application code
 COPY . .
 
-# Expose the port Render expects
+# Expose port
 EXPOSE 10000
 
-# Start the FastAPI app
+# Start FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
