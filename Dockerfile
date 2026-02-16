@@ -12,7 +12,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+# Auto-detect tessdata location and create symlink
+RUN if [ -d /usr/share/tesseract-ocr/4.00/tessdata ]; then \
+        ln -sf /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tessdata; \
+    elif [ -d /usr/share/tesseract-ocr/tessdata ]; then \
+        ln -sf /usr/share/tesseract-ocr/tessdata /usr/share/tessdata; \
+    fi
+
+ENV TESSDATA_PREFIX=/usr/share/tessdata
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
