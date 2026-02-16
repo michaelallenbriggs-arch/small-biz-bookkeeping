@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies for BOTH Tesseract + OpenCV
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
@@ -12,19 +12,27 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Auto-detect tessdata location and create symlink
-RUN if [ -d /usr/share/tesseract-ocr/4.00/tessdata ]; then \
-        ln -sf /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tessdata; \
-    elif [ -d /usr/share/tesseract-ocr/tessdata ]; then \
-        ln -sf /usr/share/tesseract-ocr/tessdata /usr/share/tessdata; \
+# Verify tessdata exists and set path
+RUN ls -la /usr/share/tesseract-ocr/ && \
+    if [ -d /usr/share/tesseract-ocr/4.00/tessdata ]; then \
+        echo "Found tessdata at 4.00"; \
+        export TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata; \
+    elif [ -d /usr/share/tesseract-ocr/5/tessdata ]; then \
+        echo "Found tessdata at 5"; \
+        export TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata; \
     fi
 
-ENV TESSDATA_PREFIX=/usr/share/tessdata
+# Try both common paths
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Verify Tesseract works at build time
+RUN tesseract --version && \
+    tesseract --list-langs
 
 EXPOSE 10000
 
