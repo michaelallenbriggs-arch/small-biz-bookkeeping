@@ -14,8 +14,8 @@ except Exception:
 
 DEFAULT_LANG = "eng"
 
-TESSERACT_CMD = os.getenv("TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
-if pytesseract is not None:
+TESSERACT_CMD = os.getenv("TESSERACT_CMD")
+if TESSERACT_CMD and pytesseract is not None:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
 # Feature toggles (safe defaults)
