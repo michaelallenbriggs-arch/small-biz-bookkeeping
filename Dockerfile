@@ -1,4 +1,5 @@
 FROM python:3.11-slim
+RUN python -m pip install --upgrade pip setuptools wheel
 
 # Install tesseract from a dedicated repo with proper tessdata
 RUN apt-get update && apt-get install -y \
