@@ -6,12 +6,14 @@ from typing import Tuple, Optional, List, Dict
 
 import cv2
 import numpy as np
+from app.services.google_ocr import google_ocr_bytes
 
 try:
     import pytesseract
 except Exception:
     pytesseract = None
 
+OCR_PROVIDER = os.getenv("OCR_PROVIDER", "tesseract").lower()
 DEFAULT_LANG = "eng"
 
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
@@ -325,9 +327,25 @@ def _ocr_best_by_quality(
 
 
 def _tesseract_string(img: np.ndarray, lang: str, psm: int, whitelist: Optional[str]) -> str:
+    # ✅ If Render env says use Google, do Google Vision instead of Tesseract
+    if OCR_PROVIDER == "google":
+        try:
+            # encode to jpg bytes for google_ocr_bytes
+            ok, buffer = cv2.imencode(".jpg", img)
+            if not ok:
+                return ""
+            return google_ocr_bytes(buffer.tobytes()) or ""
+        except Exception:
+            return ""
+
+    # ---- default: Tesseract path ----
+    if pytesseract is None:
+        return ""
+
     config = f"--oem 1 --psm {psm} -c preserve_interword_spaces=1 -c tessedit_do_invert=0"
     if whitelist:
         config += f" -c tessedit_char_whitelist={whitelist}"
+
     try:
         return pytesseract.image_to_string(img, lang=lang, config=config) or ""
     except Exception:
